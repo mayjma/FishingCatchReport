@@ -1,19 +1,35 @@
 <!doctype html>
 <!--
-Fishing Catch Report App (Single HTML)
-=====================================
+Fishing Catch Report App (Single HTML + Supabase Cloud Sync + Sync Now)
+=====================================================================
+
+Works offline:
+- If NOT signed in, everything uses localStorage (offline-first).
+- If signed in (Supabase Auth), it loads/saves catches to Supabase Postgres and uploads photos to Supabase Storage.
 
 iPhone setup (best)
-1) Put this file in a simple local web server folder on your PC:
-   - Windows: open Terminal in the folder and run:  python -m http.server 8000
-2) On iPhone, open Safari -> http://<YOUR-PC-IP>:8000/thisfile.html
+1) Host via HTTPS (GitHub Pages) OR a local HTTP server (avoid file:// from iCloud/Files).
+   - Windows: open Terminal in this folder:  python -m http.server 8000
+2) On iPhone Safari open: http://<YOUR-PC-IP>:8000/thisfile.html  (or your GitHub Pages URL)
 3) Safari -> Share -> Add to Home Screen
 
+Supabase prerequisites (recommended schema)
+- Table: public.catches with columns (at minimum):
+  id (uuid PK), user_id (uuid), species (text), caught_at (timestamptz),
+  lat (double), lng (double),
+  length_value (numeric), length_unit (text),
+  weight_lb (int), weight_oz (int check 0..15), weight_total_oz (int),
+  bait (text), weather (text), water (text), notes (text),
+  photo_path (text), created_at (timestamptz), updated_at (timestamptz)
+- Storage bucket: catch-photos (private recommended)
+- RLS:
+  - catches: user can CRUD where auth.uid() = user_id
+
 Notes
-- Offline/localStorage app (no external deps).
-- Photos compressed (~800px wide) to reduce storage.
+- Photos are compressed to ~800px wide before saving.
 - Weight is lb + oz (oz is 0–15 only).
 -->
+
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -36,6 +52,14 @@ Notes
     <circle cx="120" cy="90" r="6" fill="%230b3d2e"/>
     <path d="M32 112c10 12 20 19 34 24" stroke="%23e7fff6" stroke-width="8" stroke-linecap="round"/>
   </svg>' />
+
+  <!-- Supabase JS -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    const SUPABASE_URL = "https://tqkirvzgmlukiwsplhtk.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_6nX2kXvvJra4uNEv-PGzWA_FCz_uFF3";
+    window.sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  </script>
 
   <style>
     :root{
@@ -181,7 +205,6 @@ Notes
     }
     textarea{ min-height: 96px; resize: vertical; }
 
-    /* iOS Safari aggressive width fix for ALL form controls (fixes date/datetime overflow) */
     @supports (-webkit-touch-callout: none) {
       input, select, textarea{
         display:block;
@@ -358,7 +381,6 @@ Notes
     .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
     .footerSpace{ height: 10px; }
 
-    /* Modal */
     .modalBackdrop{
       position: fixed; inset: 0;
       background: rgba(0,0,0,.55);
@@ -646,11 +668,42 @@ Notes
         <div class="hd">
           <div>
             <h2>Tools</h2>
-            <div class="sub">Backup/restore and export.</div>
+            <div class="sub">Backup/restore, export, clear, and cloud sign-in.</div>
           </div>
         </div>
         <div class="bd">
           <div class="grid cols2">
+            <div class="card" style="box-shadow:none;">
+              <div class="hd">
+                <div>
+                  <h2>Cloud (Supabase)</h2>
+                  <div class="sub">Magic link sign-in. When signed in, saves/loads from cloud + uploads photos.</div>
+                </div>
+              </div>
+              <div class="bd">
+                <div class="grid cols2">
+                  <label>
+                    Email
+                    <input id="authEmail" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com" aria-label="Email for magic link" />
+                  </label>
+                  <div class="row" style="gap:10px;">
+                    <button class="btn primary" id="btnSendMagicLink" type="button">✉️ Send link</button>
+                    <button class="btn" id="btnSignOut" type="button">🚪 Sign out</button>
+                  </div>
+                </div>
+
+                <div class="row" style="margin-top:10px; gap:10px;">
+                  <button class="btn primary" id="btnSyncNow" type="button" aria-label="Sync now">🔁 Sync now</button>
+                  <button class="btn" id="btnReloadCloud" type="button" aria-label="Reload from cloud">☁️ Reload cloud</button>
+                </div>
+
+                <div class="footerSpace"></div>
+                <div class="msg" id="authMsg" aria-live="polite">Not signed in.</div>
+                <div class="footerSpace"></div>
+                <div class="msg" id="syncMsg" aria-live="polite">—</div>
+              </div>
+            </div>
+
             <div class="card" style="box-shadow:none;">
               <div class="hd">
                 <div>
@@ -671,19 +724,21 @@ Notes
                 <div class="msg" id="toolsMsg" aria-live="polite">—</div>
               </div>
             </div>
+          </div>
 
-            <div class="card" style="box-shadow:none;">
-              <div class="hd">
-                <div>
-                  <h2>Danger zone</h2>
-                  <div class="sub">These actions cannot be undone.</div>
-                </div>
+          <div class="footerSpace"></div>
+
+          <div class="card" style="box-shadow:none;">
+            <div class="hd">
+              <div>
+                <h2>Danger zone</h2>
+                <div class="sub">These actions cannot be undone.</div>
               </div>
-              <div class="bd">
-                <button class="btn danger" id="btnClearAll" type="button" aria-label="Clear all data">🗑️ Clear all data</button>
-                <div class="footerSpace"></div>
-                <div class="msg warn">Clearing deletes all catches and photos stored in this browser.</div>
-              </div>
+            </div>
+            <div class="bd">
+              <button class="btn danger" id="btnClearAll" type="button" aria-label="Clear all data">🗑️ Clear all data</button>
+              <div class="footerSpace"></div>
+              <div class="msg warn">Clearing deletes all catches and photos stored in this browser. If signed in, it also clears your cloud rows.</div>
             </div>
           </div>
 
@@ -695,7 +750,7 @@ Notes
     </main>
   </div>
 
-  <!-- Custom modal (replaces iOS-flaky prompt/confirm) -->
+  <!-- Custom modal -->
   <div class="modalBackdrop" id="modalBackdrop" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
       <div class="mhd">
@@ -722,6 +777,10 @@ Notes
     const MAX_IMG_W = 800;
     const IMG_QUALITY = 0.80;
     const SPOT_ROUND = 0.001;
+
+    const SUPABASE_TABLE = "catches";
+    const SUPABASE_BUCKET = "catch-photos";
+    const SIGNED_URL_SECONDS = 60 * 10;
 
     const SPECIES_CANON = [
       "Chub","Barbel","Bleak","Bream","Carp","Crucian Carp","Dace","Eel","Grayling",
@@ -778,6 +837,14 @@ Notes
       btnJumpToPb: $("btnJumpToPb"),
       btnEditPb: $("btnEditPb"),
 
+      authEmail: $("authEmail"),
+      btnSendMagicLink: $("btnSendMagicLink"),
+      btnSignOut: $("btnSignOut"),
+      btnSyncNow: $("btnSyncNow"),
+      btnReloadCloud: $("btnReloadCloud"),
+      authMsg: $("authMsg"),
+      syncMsg: $("syncMsg"),
+
       btnExportJson: $("btnExportJson"),
       btnExportCsv: $("btnExportCsv"),
       importFile: $("importFile"),
@@ -799,7 +866,30 @@ Notes
       lastKnownLocation: null,
       pendingPhotoDataUrl: null,
       pbIndex: new Map(),
+      signedUrlCache: new Map(), // photo_path -> { url, expMs }
+      authedUserId: null,
+      cloudEnabled: false,
+      syncInProgress: false,
     };
+
+    function hasSupabase() {
+      return !!window.sb;
+    }
+
+    async function refreshAuthState() {
+      if (!hasSupabase()) {
+        state.authedUserId = null;
+        state.cloudEnabled = false;
+        els.authMsg.textContent = "Supabase not available.";
+        return;
+      }
+      const { data } = await window.sb.auth.getUser();
+      state.authedUserId = data?.user?.id ?? null;
+      state.cloudEnabled = !!state.authedUserId;
+      els.authMsg.textContent = state.cloudEnabled
+        ? `Signed in: ${data.user.email}\nCloud sync ON.`
+        : "Not signed in.\nOffline mode (local only).";
+    }
 
     function setStatus(type, text) {
       els.statusLine.classList.remove("ok","warn","bad");
@@ -828,17 +918,13 @@ Notes
           resolve(result);
         };
 
-        const onKey = (e) => {
-          if (e.key === "Escape") close(false);
-        };
+        const onKey = (e) => { if (e.key === "Escape") close(false); };
 
         els.modalCancel.onclick = () => close(false);
         els.modalOk.onclick = () => {
-          if (needsInput) {
-            if (els.modalInput.value !== requireText) {
-              els.modalText.textContent = `${text}\n\n(You must type ${requireText} exactly.)`;
-              return;
-            }
+          if (needsInput && els.modalInput.value !== requireText) {
+            els.modalText.textContent = `${text}\n\n(You must type ${requireText} exactly.)`;
+            return;
           }
           close(true);
         };
@@ -847,9 +933,7 @@ Notes
         els.modalBackdrop.setAttribute("aria-hidden", "false");
         document.addEventListener("keydown", onKey);
 
-        setTimeout(() => {
-          (needsInput ? els.modalInput : els.modalOk).focus();
-        }, 0);
+        setTimeout(() => (needsInput ? els.modalInput : els.modalOk).focus(), 0);
       });
     }
 
@@ -873,15 +957,24 @@ Notes
       return Number.isFinite(n) ? n : null;
     }
 
-    function uuid() {
-      return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`;
+    function randomUUIDv4() {
+      if (crypto?.randomUUID) return crypto.randomUUID();
+      const rnd = crypto?.getRandomValues ? crypto.getRandomValues(new Uint8Array(16)) : Array.from({ length: 16 }, () => Math.floor(Math.random() * 256));
+      rnd[6] = (rnd[6] & 0x0f) | 0x40;
+      rnd[8] = (rnd[8] & 0x3f) | 0x80;
+      const hex = [...rnd].map(b => b.toString(16).padStart(2, "0")).join("");
+      return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
+    }
+
+    function isUuid(s) {
+      return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(s || ""));
     }
 
     function escapeHtml(s) {
       return String(s)
         .replace(/&/g,"&amp;")
         .replace(/</g,"&lt;")
-        .replace(/>/g,"&gt;")
+        .replace(/>/g,"&lt;")
         .replace(/"/g,"&quot;")
         .replace(/'/g,"&#039;");
     }
@@ -949,6 +1042,17 @@ Notes
       els.storageText.textContent = `${(bytes/(1024*1024)).toFixed(2)} MB`;
     }
 
+    function migrateIdsToUuid() {
+      let changed = false;
+      for (const c of state.db.catches) {
+        if (!isUuid(c.id)) {
+          c.id = randomUUIDv4();
+          changed = true;
+        }
+      }
+      return changed;
+    }
+
     function loadDB() {
       try {
         const raw = localStorage.getItem(KEY);
@@ -956,6 +1060,7 @@ Notes
         const parsed = JSON.parse(raw);
         if (parsed && Array.isArray(parsed.catches)) state.db = { version: 1, catches: parsed.catches };
       } catch {}
+      if (migrateIdsToUuid()) persistDB();
     }
 
     function persistDB() {
@@ -995,6 +1100,14 @@ Notes
       return canvas.toDataURL("image/jpeg", IMG_QUALITY);
     }
 
+    function dataUrlToBlob(dataUrl) {
+      const [meta, b64] = String(dataUrl).split(",", 2);
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return new Blob([bytes], { type: "image/jpeg" });
+    }
+
     function setupSpeciesList() {
       els.speciesList.innerHTML = "";
       for (const s of SPECIES_CANON) {
@@ -1022,13 +1135,12 @@ Notes
       if (last && BAIT_OPTIONS.includes(last)) els.baitSelect.value = last;
     }
 
-    function setupOzDropdown() {
+    function initOzDropdown() {
       els.weightOz.innerHTML = "";
       const placeholder = document.createElement("option");
       placeholder.value = "";
       placeholder.textContent = "oz";
       els.weightOz.appendChild(placeholder);
-
       for (let i = 0; i <= 15; i++) {
         const opt = document.createElement("option");
         opt.value = String(i);
@@ -1130,12 +1242,12 @@ Notes
           return { id: state.editingId, mode: "updated" };
         }
       }
-      const c = { id: uuid(), ...payload, createdAtISO: nowIso, updatedAtISO: nowIso };
+      const c = { id: randomUUIDv4(), ...payload, createdAtISO: nowIso, updatedAtISO: nowIso, photo_path: null };
       state.db.catches.push(c);
       return { id: c.id, mode: "created" };
     }
 
-    function deleteCatch(id) {
+    function deleteCatchLocal(id) {
       const n0 = state.db.catches.length;
       state.db.catches = state.db.catches.filter(c => c.id !== id);
       return state.db.catches.length !== n0;
@@ -1165,7 +1277,7 @@ Notes
 
       state.pendingPhotoDataUrl = c.photoDataUrl || null;
       els.photo.value = "";
-      setMsg(els.photoMsg, "", c.photoDataUrl ? "Existing photo kept (choose a new one to replace)." : "No photo saved.");
+      setMsg(els.photoMsg, "", c.photoDataUrl ? "Existing photo kept (choose a new one to replace)." : (c.photo_path ? "Photo in cloud (choose a new one to replace)." : "No photo saved."));
 
       els.lengthVal.value = (c.length?.value != null) ? String(c.length.value) : "";
       els.lengthUnit.value = (c.length?.unit === "cm") ? "cm" : "in";
@@ -1205,26 +1317,31 @@ Notes
       return out;
     }
 
-    function kvBox(k, v, isHtml=false) {
-      const box = document.createElement("div");
-      box.className = "box";
-      const kEl = document.createElement("div");
-      kEl.className = "k";
-      kEl.textContent = k;
-      const vEl = document.createElement("div");
-      vEl.className = "v";
-      vEl.innerHTML = isHtml ? v : escapeHtml(v);
-      box.appendChild(kEl);
-      box.appendChild(vEl);
-      return box;
+    async function getSignedUrl(photoPath) {
+      if (!state.cloudEnabled || !photoPath) return null;
+      const cached = state.signedUrlCache.get(photoPath);
+      const now = Date.now();
+      if (cached && cached.expMs > now) return cached.url;
+
+      const { data, error } = await window.sb.storage.from(SUPABASE_BUCKET).createSignedUrl(photoPath, SIGNED_URL_SECONDS);
+      if (error || !data?.signedUrl) return null;
+
+      state.signedUrlCache.set(photoPath, { url: data.signedUrl, expMs: now + (SIGNED_URL_SECONDS - 10) * 1000 });
+      return data.signedUrl;
     }
 
-    function renderList({ openId = null } = {}) {
+    async function ensureCloudPhotoUrl(imgEl, c) {
+      if (!c?.photo_path) return;
+      const url = await getSignedUrl(c.photo_path);
+      if (url) imgEl.src = url;
+    }
+
+    async function renderList({ openId = null } = {}) {
       const items = applyFiltersAndSort(state.db.catches);
       els.catchList.innerHTML = "";
 
       if (!items.length) {
-        setMsg(els.listMsg, "", "No catches match your filters yet.");
+        els.listMsg.textContent = "No catches match your filters yet.";
         return;
       }
 
@@ -1239,12 +1356,20 @@ Notes
 
         const thumb = document.createElement("div");
         thumb.className = "thumb";
+
         if (c.photoDataUrl) {
           const img = document.createElement("img");
           img.loading = "lazy";
           img.alt = `${c.species || "Fish"} thumbnail`;
           img.src = c.photoDataUrl;
           thumb.appendChild(img);
+        } else if (c.photo_path && state.cloudEnabled) {
+          const img = document.createElement("img");
+          img.loading = "lazy";
+          img.alt = `${c.species || "Fish"} thumbnail`;
+          img.src = "data:image/gif;base64,R0lGODlhAQABAAAAACw=";
+          thumb.appendChild(img);
+          ensureCloudPhotoUrl(img, c);
         } else {
           thumb.textContent = "📷";
         }
@@ -1278,6 +1403,16 @@ Notes
           img.src = c.photoDataUrl;
           ph.appendChild(img);
           body.appendChild(ph);
+        } else if (c.photo_path && state.cloudEnabled) {
+          const ph = document.createElement("div");
+          ph.className = "photoFull";
+          const img = document.createElement("img");
+          img.loading = "lazy";
+          img.alt = `${c.species || "Fish"} photo`;
+          img.src = "data:image/gif;base64,R0lGODlhAQABAAAAACw=";
+          ph.appendChild(img);
+          body.appendChild(ph);
+          ensureCloudPhotoUrl(img, c);
         }
 
         const kv = document.createElement("div");
@@ -1285,6 +1420,20 @@ Notes
 
         const lenText = (c.length?.value != null) ? `${c.length.value} ${c.length.unit}` : "—";
         const wtText = (c.weight?.totalOz != null) ? `${c.weight.lb} lb ${c.weight.oz} oz` : "—";
+
+        const kvBox = (k, v, isHtml=false) => {
+          const box = document.createElement("div");
+          box.className = "box";
+          const kEl = document.createElement("div");
+          kEl.className = "k";
+          kEl.textContent = k;
+          const vEl = document.createElement("div");
+          vEl.className = "v";
+          vEl.innerHTML = isHtml ? v : escapeHtml(v);
+          box.appendChild(kEl);
+          box.appendChild(vEl);
+          return box;
+        };
 
         kv.appendChild(kvBox("Species", c.species || "—"));
         kv.appendChild(kvBox("Date & time", formatDateTime(c.datetimeISO)));
@@ -1327,10 +1476,19 @@ Notes
           });
           if (!ok) return;
 
-          deleteCatch(c.id);
-          const res = persistDB();
-          if (!res.ok) setMsg(els.listMsg, "bad", `Delete succeeded but save failed: ${res.error}`);
-          renderList();
+          if (state.cloudEnabled) {
+            try {
+              if (c.photo_path) {
+                await window.sb.storage.from(SUPABASE_BUCKET).remove([c.photo_path]);
+                state.signedUrlCache.delete(c.photo_path);
+              }
+              await window.sb.from(SUPABASE_TABLE).delete().eq("id", c.id).eq("user_id", state.authedUserId);
+            } catch {}
+          }
+
+          deleteCatchLocal(c.id);
+          persistDB();
+          await renderList();
           renderStats();
         });
 
@@ -1361,7 +1519,7 @@ Notes
       }
 
       els.catchList.appendChild(frag);
-      setMsg(els.listMsg, "", `${items.length} catch${items.length === 1 ? "" : "es"} shown.`);
+      els.listMsg.textContent = `${items.length} catch${items.length === 1 ? "" : "es"} shown.`;
     }
 
     function computePbIndex() {
@@ -1417,7 +1575,7 @@ Notes
       }
 
       const mapUrl = appleMapsLink(c.lat, c.lng);
-      const wtText = `${c.weight.lb} lb ${c.weight.oz} oz`;
+      const wtText = (c.weight?.totalOz != null) ? `${c.weight.lb} lb ${c.weight.oz} oz` : "—";
       const lenText = (c.length?.value != null) ? `${c.length.value} ${c.length.unit}` : "—";
 
       els.pbDetails.innerHTML =
@@ -1447,8 +1605,8 @@ Notes
       const biggestWt = items.filter(c => c.weight?.totalOz != null).sort((a,b)=> b.weight.totalOz - a.weight.totalOz)[0] || null;
 
       els.statTop.innerHTML =
-        `<div class="stat"><div class="n">${escapeHtml(String(total))}</div><div class="l">Total catches</div></div>` +
-        `<div class="stat"><div class="n">${escapeHtml(String(speciesCounts.size || 0))}</div><div class="l">Distinct species</div></div>` +
+        `<div class="stat"><div class="n">${total}</div><div class="l">Total catches</div></div>` +
+        `<div class="stat"><div class="n">${speciesCounts.size || 0}</div><div class="l">Distinct species</div></div>` +
         `<div class="stat"><div class="n">${escapeHtml(String(topSpecies))}</div><div class="l">Most common species</div></div>`;
 
       const breakdown = Array.from(speciesCounts.entries()).sort((a,b)=> b[1]-a[1] || a[0].localeCompare(b[0]));
@@ -1477,7 +1635,7 @@ Notes
 
       const bLenTxt = biggestLen ? `${biggestLen.species} — ${biggestLen.length.value} ${biggestLen.length.unit}` : "—";
       const bWtTxt = biggestWt ? `${biggestWt.species} — ${biggestWt.weight.lb} lb ${biggestWt.weight.oz} oz` : "—";
-      setMsg(els.statsMsg, "", `Biggest (length): ${bLenTxt} • Biggest (weight): ${bWtTxt}`);
+      els.statsMsg.textContent = `Biggest (length): ${bLenTxt} • Biggest (weight): ${bWtTxt}`;
 
       const pbMap = computePbIndex();
       setupPbSpeciesSelect(pbMap.keys());
@@ -1508,11 +1666,11 @@ Notes
 
     function getLocation() {
       if (!("geolocation" in navigator)) {
-        setMsg(els.geoMsg, "warn", "Geolocation not available. You can still save without location.");
+        els.geoMsg.textContent = "Geolocation not available. You can still save without location.";
         return;
       }
 
-      setMsg(els.geoMsg, "", "Requesting location permission…");
+      els.geoMsg.textContent = "Requesting location permission…";
       els.btnGetLocation.disabled = true;
 
       navigator.geolocation.getCurrentPosition(
@@ -1522,14 +1680,16 @@ Notes
           const lng = pos.coords.longitude;
           state.lastKnownLocation = { lat, lng };
           setLocPill();
-          setMsg(els.geoMsg, "ok", `Captured: ${formatLatLng(lat, lng)}`);
+          els.geoMsg.textContent = `Captured: ${formatLatLng(lat, lng)}`;
+          els.geoMsg.className = "msg ok";
         },
         (err) => {
           els.btnGetLocation.disabled = false;
           const reason = (err && err.code === 1)
             ? "Permission denied. You can still save without location."
             : "Could not get location. Try again.";
-          setMsg(els.geoMsg, "warn", reason);
+          els.geoMsg.textContent = reason;
+          els.geoMsg.className = "msg warn";
         },
         { enableHighAccuracy: true, timeout: 12000, maximumAge: 15000 }
       );
@@ -1581,7 +1741,8 @@ Notes
         "lengthValue","lengthUnit",
         "weightLb","weightOz","weightTotalOz",
         "bait","weather","water","notes",
-        "hasPhoto","createdAtISO","updatedAtISO"
+        "hasPhotoOffline","photoPathCloud",
+        "createdAtISO","updatedAtISO"
       ]);
 
       for (const c of state.db.catches) {
@@ -1603,6 +1764,7 @@ Notes
           c.water || "",
           c.notes || "",
           c.photoDataUrl ? "true" : "false",
+          c.photo_path || "",
           c.createdAtISO || "",
           c.updatedAtISO || ""
         ]);
@@ -1621,7 +1783,7 @@ Notes
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
 
-      setMsg(els.toolsMsg, "ok", "Export CSV started (photos excluded).");
+      setMsg(els.toolsMsg, "ok", "Export CSV started (no image bytes; includes cloud photo path if any).");
     }
 
     async function importJSON(file) {
@@ -1644,11 +1806,12 @@ Notes
         if (!ok) return;
 
         state.db = { version: 1, catches: data.catches.slice() };
+        migrateIdsToUuid();
         const res = persistDB();
-        if (!res.ok) { setMsg(els.toolsMsg, "bad", `Imported but could not save: ${res.error}`); return; }
+        if (!res.ok) { setMsg(els.toolsMsg, "bad", `Imported but could not save locally: ${res.error}`); return; }
 
-        setMsg(els.toolsMsg, "ok", `Imported ${state.db.catches.length} catches.`);
-        renderList();
+        setMsg(els.toolsMsg, "ok", `Imported ${state.db.catches.length} catches (local).`);
+        await renderList();
         renderStats();
       } catch (e) {
         setMsg(els.toolsMsg, "bad", `Import failed: ${e.message || "unknown error"}`);
@@ -1657,10 +1820,181 @@ Notes
       }
     }
 
+    function ymd(d) {
+      const pad = (n) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+    }
+
+    function setDateRange(from, to) {
+      els.fromDate.value = from ? ymd(from) : "";
+      els.toDate.value = to ? ymd(to) : "";
+      renderList();
+    }
+
+    async function loadFromSupabase(userId) {
+      try {
+        setMsg(els.toolsMsg, "", "Loading from cloud…");
+        const { data, error } = await window.sb
+          .from(SUPABASE_TABLE)
+          .select("*")
+          .eq("user_id", userId);
+
+        if (error) {
+          setMsg(els.toolsMsg, "warn", `Cloud load failed; using offline data. (${error.message})`);
+          return;
+        }
+
+        state.db = {
+          version: 1,
+          catches: (data || []).map(r => ({
+            id: r.id,
+            species: r.species,
+            datetimeISO: r.caught_at,
+            lat: r.lat,
+            lng: r.lng,
+            length: { value: r.length_value, unit: r.length_unit || "in" },
+            weight: (r.weight_total_oz == null)
+              ? { lb: null, oz: null, totalOz: null }
+              : { lb: r.weight_lb ?? 0, oz: r.weight_oz ?? 0, totalOz: r.weight_total_oz ?? 0 },
+            bait: r.bait || "",
+            weather: r.weather || "",
+            water: r.water || "",
+            notes: r.notes || "",
+            photoDataUrl: null,
+            photo_path: r.photo_path || null,
+            createdAtISO: r.created_at || null,
+            updatedAtISO: r.updated_at || null,
+          }))
+        };
+
+        persistDB();
+        setMsg(els.toolsMsg, "ok", `Cloud loaded: ${state.db.catches.length} catches.`);
+      } catch (e) {
+        setMsg(els.toolsMsg, "warn", `Cloud load failed; using offline data. (${e.message || "error"})`);
+      }
+    }
+
+    async function upsertCatchToSupabase(userId, c) {
+      const row = {
+        id: c.id,
+        user_id: userId,
+        species: c.species,
+        caught_at: c.datetimeISO,
+        lat: c.lat,
+        lng: c.lng,
+        length_value: c.length?.value ?? null,
+        length_unit: c.length?.unit ?? null,
+        weight_lb: c.weight?.lb ?? null,
+        weight_oz: c.weight?.oz ?? null,
+        weight_total_oz: c.weight?.totalOz ?? null,
+        bait: c.bait || null,
+        weather: c.weather || null,
+        water: c.water || null,
+        notes: c.notes || null,
+        photo_path: c.photo_path || null,
+      };
+
+      const { error } = await window.sb.from(SUPABASE_TABLE).upsert(row, { onConflict: "id" });
+      if (error) throw error;
+    }
+
+    async function uploadPhotoToStorage(userId, catchId, dataUrl) {
+      const blob = dataUrlToBlob(dataUrl);
+      const path = `${userId}/${catchId}.jpg`;
+
+      const { error } = await window.sb.storage
+        .from(SUPABASE_BUCKET)
+        .upload(path, blob, { upsert: true, contentType: "image/jpeg" });
+
+      if (error) throw error;
+      state.signedUrlCache.delete(path);
+      return path;
+    }
+
+    async function syncNow() {
+      if (!state.cloudEnabled) {
+        setMsg(els.syncMsg, "warn", "Sign in first to sync.");
+        return;
+      }
+      if (state.syncInProgress) return;
+
+      state.syncInProgress = true;
+      els.btnSyncNow.disabled = true;
+      els.btnReloadCloud.disabled = true;
+
+      try {
+        const total = state.db.catches.length;
+        let okRows = 0;
+        let okPhotos = 0;
+        let failed = 0;
+
+        setMsg(els.syncMsg, "", `Syncing ${total} catches…`);
+
+        for (let i = 0; i < total; i++) {
+          const c = state.db.catches[i];
+          try {
+            // Upload offline photo if present (and either not uploaded yet, or we want to overwrite)
+            if (c.photoDataUrl && !c.photo_path) {
+              const path = await uploadPhotoToStorage(state.authedUserId, c.id, c.photoDataUrl);
+              c.photo_path = path;
+              okPhotos++;
+              persistDB();
+            }
+
+            await upsertCatchToSupabase(state.authedUserId, c);
+            okRows++;
+
+            if (i % 3 === 0 || i === total - 1) {
+              setMsg(els.syncMsg, "", `Sync progress: ${i + 1}/${total} (rows ok: ${okRows}, photos uploaded: ${okPhotos}, failed: ${failed})`);
+            }
+          } catch {
+            failed++;
+            setMsg(els.syncMsg, "warn", `Sync progress: ${i + 1}/${total} (rows ok: ${okRows}, photos uploaded: ${okPhotos}, failed: ${failed})`);
+          }
+        }
+
+        setMsg(els.syncMsg, failed ? "warn" : "ok",
+          `Sync complete. Rows ok: ${okRows}/${total}. Photos uploaded: ${okPhotos}. Failed: ${failed}.`);
+        await renderList();
+        renderStats();
+      } finally {
+        state.syncInProgress = false;
+        els.btnSyncNow.disabled = false;
+        els.btnReloadCloud.disabled = false;
+      }
+    }
+
+    async function sendMagicLink(email) {
+      const clean = String(email || "").trim();
+      if (!clean) {
+        setMsg(els.authMsg, "warn", "Enter an email first.");
+        return;
+      }
+      setMsg(els.authMsg, "", "Sending magic link…");
+      const { error } = await window.sb.auth.signInWithOtp({
+        email: clean,
+        options: { emailRedirectTo: window.location.origin + window.location.pathname }
+      });
+      if (error) {
+        setMsg(els.authMsg, "bad", `Could not send link: ${error.message}`);
+        return;
+      }
+      setMsg(els.authMsg, "ok", "Link sent. Open it from your email on this device/browser.");
+    }
+
+    async function signOut() {
+      await window.sb.auth.signOut();
+      await refreshAuthState();
+      setMsg(els.toolsMsg, "", "Signed out. Offline mode (local only).");
+      setMsg(els.syncMsg, "", "—");
+      await renderList();
+      renderStats();
+    }
+
     async function clearAll() {
       const ok1 = await showModal({
         title: "Clear all data",
-        text: "This will delete ALL catches and photos stored in this browser.",
+        text: "This will delete ALL catches stored in this browser. If signed in, it also deletes your cloud rows.",
         okText: "Continue",
         cancelText: "Cancel"
       });
@@ -1675,6 +2009,15 @@ Notes
       });
       if (!ok2) { setMsg(els.toolsMsg, "warn", "Clear cancelled."); return; }
 
+      if (state.cloudEnabled) {
+        try {
+          await window.sb.from(SUPABASE_TABLE).delete().eq("user_id", state.authedUserId);
+          const paths = state.db.catches.map(c => c.photo_path).filter(Boolean);
+          if (paths.length) await window.sb.storage.from(SUPABASE_BUCKET).remove(paths);
+          state.signedUrlCache.clear();
+        } catch {}
+      }
+
       try {
         const keysToRemove = [];
         for (let i = 0; i < localStorage.length; i++) {
@@ -1687,21 +2030,11 @@ Notes
       state.db = { version: 1, catches: [] };
       persistDB();
 
-      renderList();
+      await renderList();
       renderStats();
       resetForm();
       setMsg(els.toolsMsg, "ok", "All data cleared.");
-    }
-
-    function ymd(d) {
-      const pad = (n) => String(n).padStart(2, "0");
-      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-    }
-
-    function setDateRange(from, to) {
-      els.fromDate.value = from ? ymd(from) : "";
-      els.toDate.value = to ? ymd(to) : "";
-      renderList();
+      setMsg(els.syncMsg, "", "—");
     }
 
     function wireEvents() {
@@ -1736,7 +2069,7 @@ Notes
         setStatus("ok", "Form reset; kept last known spot.");
       });
 
-      els.btnSave.addEventListener("click", () => {
+      els.btnSave.addEventListener("click", async () => {
         const payload = getFormPayload();
 
         if (payload.weight.totalOz != null) {
@@ -1750,37 +2083,50 @@ Notes
         if (payload.bait) localStorage.setItem(KEY_LAST_BAIT, payload.bait);
 
         const resUpsert = upsertCatch(payload);
-        const resStore = persistDB();
+        const c = state.db.catches.find(x => x.id === resUpsert.id);
 
+        const resStore = persistDB();
         if (!resStore.ok) {
           if (payload.photoDataUrl) {
-            showModal({
+            const ok = await showModal({
               title: "Storage full",
               text: "Storage is full. Save WITHOUT the photo?",
               okText: "Save without photo",
               cancelText: "Cancel"
-            }).then((ok) => {
-              if (!ok) return;
-              const c = state.db.catches.find(x => x.id === resUpsert.id);
-              if (c) c.photoDataUrl = null;
-              const retry = persistDB();
-              if (retry.ok) {
-                setStatus("warn", "Saved without photo due to storage limits.");
-                state.pendingPhotoDataUrl = null;
-                renderList(); renderStats();
-                resetForm({ keepLocation: true });
-              } else {
-                setStatus("bad", `Could not save to storage (${retry.error}).`);
-              }
             });
+            if (!ok) return;
+
+            if (c) c.photoDataUrl = null;
+            state.pendingPhotoDataUrl = null;
+            const retry = persistDB();
+            if (!retry.ok) { setStatus("bad", `Could not save locally (${retry.error}).`); return; }
+            setStatus("warn", "Saved without photo due to local storage limits.");
+          } else {
+            setStatus("bad", `Could not save locally (${resStore.error}).`);
             return;
           }
-          setStatus("bad", `Could not save to storage (${resStore.error}). Export + clear old entries/photos.`);
-          return;
         }
 
-        setStatus("ok", resUpsert.mode === "updated" ? "Catch updated." : "Catch saved.");
-        renderList();
+        if (state.cloudEnabled && c) {
+          try {
+            setStatus("", "Syncing to cloud…");
+
+            if (state.pendingPhotoDataUrl) {
+              const path = await uploadPhotoToStorage(state.authedUserId, c.id, state.pendingPhotoDataUrl);
+              c.photo_path = path;
+            }
+
+            await upsertCatchToSupabase(state.authedUserId, c);
+            setStatus("ok", resUpsert.mode === "updated" ? "Catch updated (cloud synced)." : "Catch saved (cloud synced).");
+          } catch (e) {
+            setStatus("warn", `Saved locally, but cloud sync failed: ${e.message || "error"}`);
+          }
+        } else {
+          setStatus("ok", resUpsert.mode === "updated" ? "Catch updated (offline)." : "Catch saved (offline).");
+        }
+
+        state.pendingPhotoDataUrl = null;
+        await renderList();
         renderStats();
         resetForm({ keepLocation: true });
       });
@@ -1817,12 +2163,12 @@ Notes
         renderPbDetails();
       });
 
-      els.btnJumpToPb.addEventListener("click", () => {
+      els.btnJumpToPb.addEventListener("click", async () => {
         const species = els.pbSpeciesSelect.value || "";
         const id = state.pbIndex.get(species);
         if (!id) return;
         switchView("catches");
-        renderList({ openId: id });
+        await renderList({ openId: id });
         const el = Array.from(document.querySelectorAll("details.item")).find(x => x.dataset.id === id);
         if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
       });
@@ -1841,25 +2187,50 @@ Notes
       });
 
       els.btnClearAll.addEventListener("click", clearAll);
+
+      // Auth
+      els.btnSendMagicLink.addEventListener("click", () => sendMagicLink(els.authEmail.value));
+      els.btnSignOut.addEventListener("click", signOut);
+
+      // Sync
+      els.btnSyncNow.addEventListener("click", syncNow);
+      els.btnReloadCloud.addEventListener("click", async () => {
+        if (!state.cloudEnabled) { setMsg(els.syncMsg, "warn", "Sign in first to reload."); return; }
+        await loadFromSupabase(state.authedUserId);
+        await renderList();
+        renderStats();
+        setMsg(els.syncMsg, "ok", "Reloaded from cloud.");
+      });
     }
 
-    function init() {
+    async function init() {
       setupSpeciesList();
       setupBaitSelect();
-      setupOzDropdown();
+      initOzDropdown();
 
       loadDB();
       updateStoragePill();
 
       els.datetime.value = nowLocalDatetimeValue();
       els.sortBy.value = "date_desc";
-
       setLocPill();
       setStatus("", "");
 
-      renderList();
+      await refreshAuthState();
+      if (state.cloudEnabled) await loadFromSupabase(state.authedUserId);
+
+      await renderList();
       renderStats();
       wireEvents();
+
+      if (hasSupabase()) {
+        window.sb.auth.onAuthStateChange(async () => {
+          await refreshAuthState();
+          if (state.cloudEnabled) await loadFromSupabase(state.authedUserId);
+          await renderList();
+          renderStats();
+        });
+      }
     }
 
     init();
