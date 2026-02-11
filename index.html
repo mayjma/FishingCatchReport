@@ -410,9 +410,6 @@ Notes
         <button class="tab" id="tabStats" aria-selected="false" aria-controls="viewStats" type="button">📊 Stats</button>
         <button class="tab" id="tabTools" aria-selected="false" aria-controls="viewTools" type="button">⚙️ Tools</button>
       </nav>
-
-      <button onclick="netlifyIdentity.open()">Login</button>
-
     </header>
 
     <main class="wrap" role="main">
@@ -1867,20 +1864,5 @@ Notes
 
     init();
   </script>
-  <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
-
-   <script>
-  netlifyIdentity.on('init', user => {
-    if (!user) {
-      netlifyIdentity.open(); // force login modal on page load
-    }
-  });
-</script>
-
-   
 </body>
 </html>
-
-
-
-
