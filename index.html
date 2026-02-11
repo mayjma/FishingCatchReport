@@ -1869,8 +1869,18 @@ Notes
   </script>
   <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
 
+   <script>
+  netlifyIdentity.on('init', user => {
+    if (!user) {
+      netlifyIdentity.open(); // force login modal on page load
+    }
+  });
+</script>
+
+   
 </body>
 </html>
+
 
 
 
