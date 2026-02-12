@@ -59,9 +59,10 @@ Notes
   const SUPABASE_URL = "https://tqkirvzgmlukiwsplhtk.supabase.co";
   const SUPABASE_ANON_KEY = "sb_publishable_6nX2kXvvJra4uNEv-PGzWA_FCz_uFF3";
 
-  // FIX: create the client as "supabase"
-  window.supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
- </script>
+  // FIX: Properly initialize Supabase client
+  const { createClient } = window.supabase;
+  window.sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  </script>
 
 
   <style>
@@ -2240,5 +2241,6 @@ Notes
   </script>
 </body>
 </html>
+
 
 
