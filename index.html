@@ -56,11 +56,13 @@ Notes
   <!-- Supabase JS -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
-    const SUPABASE_URL = "https://tqkirvzgmlukiwsplhtk.supabase.co";
-    const SUPABASE_ANON_KEY = "sb_publishable_6nX2kXvvJra4uNEv-PGzWA_FCz_uFF3";
-    window.supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const SUPABASE_URL = "https://tqkirvzgmlukiwsplhtk.supabase.co";
+  const SUPABASE_ANON_KEY = "sb_publishable_6nX2kXvvJra4uNEv-PGzWA_FCz_uFF3";
 
-  </script>
+  // FIX: create the client as "supabase"
+  window.supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+ </script>
+
 
   <style>
     :root{
@@ -2238,4 +2240,5 @@ Notes
   </script>
 </body>
 </html>
+
 
