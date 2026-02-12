@@ -1246,7 +1246,7 @@ Notes
           return { id: state.editingId, mode: "updated" };
         }
       }
-      const c = { id: randomUUIDv4(), ...payload, createdAtISO: nowIso, updatedAtISO: nowIso, photo_path: null };
+      const c = { ...payload, createdAtISO: nowIso, updatedAtISO: nowIso, photo_path: null };
       state.db.catches.push(c);
       return { id: c.id, mode: "created" };
     }
@@ -2241,6 +2241,7 @@ Notes
   </script>
 </body>
 </html>
+
 
 
 
