@@ -6,14 +6,43 @@
     <title>Fishing Catch Report</title>
 </head>
 <body>
+    <h1>Fishing Catch Report App</h1>
+    <form id="catch-form">
+        <label for="fish-type">Fish Type:</label>
+        <input type="text" id="fish-type" name="fish-type" required>
+
+        <label for="weight">Weight:</label>
+        <input type="number" id="weight" name="weight" required>
+
+        <label for="location">Location:</label>
+        <input type="text" id="location" name="location" required>
+
+        <button type="submit">Submit</button>
+    </form>
+
     <script>
-        // Other code...
-        const nowIso = new Date().toISOString();
-        // Previous line 1249
-        // const c = { id: randomUUIDv4(), ...payload, createdAtISO: nowIso, updatedAtISO: nowIso, photo_path: null };
-        // Updated line 1249
-        const c = { ...payload, createdAtISO: nowIso, updatedAtISO: nowIso, photo_path: null };
-        // Other code...
+        const form = document.getElementById('catch-form');
+
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const payload = {
+                fishType: form['fish-type'].value,
+                weight: form['weight'].value,
+                location: form['location'].value
+            };
+            const nowIso = new Date().toISOString();
+
+            // Fixed line 1249
+            const c = { ...payload, createdAtISO: nowIso, updatedAtISO: nowIso, photo_path: null };
+
+            await fetch('YOUR_SUPABASE_URL', { // Add your Supabase URL
+                method: 'POST',
+                body: JSON.stringify(c),
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+        });
     </script>
 </body>
 </html>
