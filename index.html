@@ -1,0 +1,1802 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Fishing Catch Report - Cloud Sync</title>
+  
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  
+  <script>
+    // IMPORTANT: Configure your Supabase settings here
+    const SUPABASE_CONFIG = {
+      url: 'https://tqkirvzgmlukiwsplhtk.supabase.co',
+      anonKey: 'sb_publishable_6nX2kXvvJra4uNEv-PGzWA_FCz_uFF3',
+      storageBucket: 'catch-photos'
+    };
+  </script>
+  
+  <style>
+    /* CSS Variables */
+    :root {
+      --bg: #071b16;
+      --card: #0b2a23;
+      --text: #eafff7;
+      --muted: #b8d9cf;
+      --ok: #34d399;
+      --warn: #fbbf24;
+      --danger: #fb7185;
+    }
+    
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      background-image: 
+        radial-gradient(circle at 20% 30%, rgba(45,212,191,0.08) 0%, transparent 50%),
+        radial-gradient(circle at 80% 70%, rgba(96,165,250,0.06) 0%, transparent 50%);
+      color: var(--text);
+      min-height: 100vh;
+      padding-bottom: 80px;
+    }
+    
+    /* Login Screen Styles */
+    .login-screen {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: var(--bg);
+      z-index: 10000;
+      padding: 20px;
+      justify-content: center;
+      align-items: center;
+    }
+    
+    .login-screen.active { display: flex; }
+    
+    .login-card {
+      background: var(--card);
+      border-radius: 16px;
+      padding: 32px 24px;
+      width: 100%;
+      max-width: 400px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+    }
+    
+    .login-header {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    
+    .login-header h1 {
+      font-size: 28px;
+      margin-bottom: 8px;
+      background: linear-gradient(135deg, var(--ok), #60a5fa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    
+    .login-header p {
+      color: var(--muted);
+      font-size: 14px;
+    }
+    
+    .login-form {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    
+    .login-input {
+      background: var(--bg);
+      border: 1px solid rgba(52,211,153,0.2);
+      border-radius: 12px;
+      padding: 14px 16px;
+      color: var(--text);
+      font-size: 16px;
+      width: 100%;
+    }
+    
+    .login-input:focus {
+      outline: none;
+      border-color: var(--ok);
+    }
+    
+    .login-btn {
+      background: var(--ok);
+      color: var(--bg);
+      border: none;
+      border-radius: 12px;
+      padding: 14px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .login-btn:active { transform: scale(0.98); }
+    
+    .login-btn.secondary {
+      background: transparent;
+      border: 1px solid var(--ok);
+      color: var(--ok);
+    }
+    
+    .login-btn.offline {
+      background: transparent;
+      border: 1px solid var(--muted);
+      color: var(--muted);
+      margin-top: 16px;
+    }
+    
+    .login-divider {
+      text-align: center;
+      color: var(--muted);
+      font-size: 14px;
+      margin: 8px 0;
+    }
+    
+    .login-error {
+      color: var(--danger);
+      font-size: 14px;
+      text-align: center;
+      margin-top: 8px;
+      display: none;
+    }
+    
+    .login-error.show { display: block; }
+    
+    /* Header */
+    header {
+      background: var(--card);
+      padding: 16px 20px;
+      border-bottom: 1px solid rgba(52,211,153,0.1);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    
+    .header-content {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    h1 {
+      font-size: 24px;
+      font-weight: 700;
+    }
+    
+    .sync-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+    
+    .sync-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--danger);
+    }
+    
+    .sync-dot.online { background: var(--ok); }
+    .sync-dot.syncing { background: var(--warn); animation: pulse 1s infinite; }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    
+    /* Navigation */
+    nav {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: var(--card);
+      border-top: 1px solid rgba(52,211,153,0.1);
+      display: flex;
+      z-index: 99;
+    }
+    
+    nav button {
+      flex: 1;
+      background: none;
+      border: none;
+      color: var(--muted);
+      padding: 12px;
+      font-size: 12px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+    
+    nav button.active { color: var(--ok); }
+    nav button .icon { font-size: 20px; }
+    
+    /* Screens */
+    .screen {
+      display: none;
+      padding: 20px;
+      animation: slideIn 0.3s ease;
+    }
+    
+    .screen.active { display: block; }
+    
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    
+    /* Cards */
+    .card {
+      background: var(--card);
+      background-image: linear-gradient(135deg, rgba(45,212,191,.30), rgba(96,165,250,.18));
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 16px;
+      border: 1px solid rgba(52,211,153,0.1);
+    }
+    
+    /* Form Elements */
+    .form-group { margin-bottom: 16px; }
+    
+    label {
+      display: block;
+      color: var(--muted);
+      font-size: 14px;
+      margin-bottom: 8px;
+    }
+    
+    input, select, textarea {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid rgba(52,211,153,0.2);
+      border-radius: 12px;
+      padding: 12px 16px;
+      color: var(--text);
+      font-size: 16px;
+      font-family: inherit;
+    }
+    
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: var(--ok);
+    }
+    
+    textarea { resize: vertical; min-height: 80px; }
+    
+    .input-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    
+    /* Buttons */
+    .btn {
+      background: var(--ok);
+      color: var(--bg);
+      border: none;
+      border-radius: 12px;
+      padding: 14px 24px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      width: 100%;
+      transition: all 0.2s;
+    }
+    
+    .btn:active { transform: scale(0.98); }
+    
+    .btn.secondary {
+      background: transparent;
+      border: 1px solid var(--ok);
+      color: var(--ok);
+    }
+    
+    .btn.danger { background: var(--danger); }
+    
+    .btn-group {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 16px;
+    }
+    
+    /* Photo Preview */
+    .photo-preview {
+      width: 100%;
+      border-radius: 12px;
+      margin-top: 12px;
+      position: relative;
+      display: none;
+    }
+    
+    .photo-preview.show { display: block; }
+    
+    .photo-preview img {
+      width: 100%;
+      border-radius: 12px;
+    }
+    
+    .photo-remove {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: var(--danger);
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 32px;
+      height: 32px;
+      font-size: 18px;
+      cursor: pointer;
+    }
+    
+    /* Catch List */
+    .catch-item {
+      background: var(--card);
+      border-radius: 16px;
+      padding: 16px;
+      margin-bottom: 12px;
+      border: 1px solid rgba(52,211,153,0.1);
+      cursor: pointer;
+    }
+    
+    .catch-header {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    
+    .catch-species {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--ok);
+    }
+    
+    .catch-size {
+      font-size: 14px;
+      color: var(--muted);
+    }
+    
+    .catch-details {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+      margin-top: 8px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    
+    .catch-photo-thumb {
+      width: 60px;
+      height: 60px;
+      border-radius: 8px;
+      object-fit: cover;
+    }
+    
+    .sync-badge {
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      margin-left: 8px;
+    }
+    
+    .sync-badge.synced { background: rgba(52,211,153,0.2); color: var(--ok); }
+    .sync-badge.pending { background: rgba(251,191,36,0.2); color: var(--warn); }
+    
+    /* Filter Presets */
+    .filter-presets {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      margin-bottom: 16px;
+      -webkit-overflow-scrolling: touch;
+    }
+    
+    .filter-presets::-webkit-scrollbar { display: none; }
+    
+    .filter-preset {
+      background: var(--card);
+      border: 1px solid rgba(52,211,153,0.2);
+      border-radius: 20px;
+      padding: 8px 16px;
+      font-size: 14px;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+    
+    .filter-preset.active {
+      background: var(--ok);
+      color: var(--bg);
+      border-color: var(--ok);
+    }
+    
+    /* Stats */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    
+    .stat-card {
+      background: var(--card);
+      background-image: linear-gradient(135deg, rgba(45,212,191,.30), rgba(96,165,250,.18));
+      border-radius: 16px;
+      padding: 20px;
+      border: 1px solid rgba(52,211,153,0.1);
+      text-align: center;
+    }
+    
+    .stat-value {
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--ok);
+      margin-bottom: 4px;
+    }
+    
+    .stat-label {
+      font-size: 14px;
+      color: var(--muted);
+    }
+    
+    /* Tools */
+    .tool-item {
+      background: var(--card);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      border: 1px solid rgba(52,211,153,0.1);
+    }
+    
+    .tool-info h3 {
+      font-size: 16px;
+      margin-bottom: 4px;
+    }
+    
+    .tool-info p {
+      font-size: 13px;
+      color: var(--muted);
+    }
+    
+    .tool-icon { font-size: 24px; }
+    
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 80px;
+      left: 20px;
+      right: 20px;
+      background: var(--card);
+      color: var(--text);
+      padding: 16px;
+      border-radius: 12px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+      transform: translateY(150%);
+      transition: transform 0.3s ease;
+      z-index: 1000;
+      border: 1px solid rgba(52,211,153,0.2);
+    }
+    
+    .toast.show { transform: translateY(0); }
+    .toast.error { border-color: var(--danger); background: rgba(251,113,133,0.1); }
+    .toast.success { border-color: var(--ok); background: rgba(52,211,153,0.1); }
+    
+    /* Checkbox */
+    .checkbox-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 16px 0;
+    }
+    
+    input[type="checkbox"] {
+      width: 24px;
+      height: 24px;
+      cursor: pointer;
+      -webkit-appearance: none;
+      background: var(--bg);
+      border: 2px solid var(--ok);
+      border-radius: 6px;
+      position: relative;
+    }
+    
+    input[type="checkbox"]:checked::after {
+      content: '✓';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: var(--ok);
+      font-size: 16px;
+      font-weight: bold;
+    }
+    
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--muted);
+    }
+    
+    .empty-state .icon {
+      font-size: 64px;
+      margin-bottom: 16px;
+      opacity: 0.5;
+    }
+    
+    /* Modal */
+    .modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.8);
+      z-index: 999;
+      padding: 20px;
+    }
+    
+    .modal.active {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .modal-content {
+      background: var(--card);
+      border-radius: 16px;
+      padding: 24px;
+      max-width: 400px;
+      width: 100%;
+    }
+    
+    .modal-header {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+    
+    .modal-body {
+      margin-bottom: 24px;
+      color: var(--muted);
+    }
+    
+    .spinner {
+      border: 3px solid rgba(52,211,153,0.2);
+      border-top: 3px solid var(--ok);
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin: 20px auto;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Login Screen -->
+<div class="login-screen active" id="loginScreen">
+  <div class="login-card">
+    <div class="login-header">
+      <h1>🎣 Fishing Catch Report</h1>
+      <p>Track your catches across all devices</p>
+    </div>
+    <div class="login-form">
+      <input type="email" id="loginEmail" class="login-input" placeholder="Email" autocomplete="email">
+      <input type="password" id="loginPassword" class="login-input" placeholder="Password" autocomplete="current-password">
+      <button class="login-btn" onclick="app.login()">Login</button>
+      <div class="login-divider">or</div>
+      <button class="login-btn secondary" onclick="app.signup()">Sign Up</button>
+      <button class="login-btn secondary" onclick="app.sendMagicLink()">Send Magic Link</button>
+      <button class="login-btn offline" onclick="app.continueOffline()">Continue Offline</button>
+      <div class="login-error" id="loginError"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Main App -->
+<div id="mainApp" style="display: none;">
+  <header>
+    <div class="header-content">
+      <h1>🎣 Catch Report</h1>
+      <div class="sync-indicator">
+        <span class="sync-dot" id="syncDot"></span>
+        <span id="syncStatus">Offline</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Add Catch Screen -->
+  <div class="screen active" id="addScreen">
+    <div class="card">
+      <h2 style="margin-bottom: 20px;">Log New Catch</h2>
+      
+      <div class="form-group">
+        <label>Species *</label>
+        <input type="text" id="species" placeholder="e.g., Pike, Bass, Trout">
+      </div>
+
+      <div class="form-group">
+        <label>Date & Time *</label>
+        <input type="datetime-local" id="datetime">
+      </div>
+
+      <div class="form-group">
+        <label>Location</label>
+        <div style="display: flex; gap: 8px;">
+          <input type="text" id="location" placeholder="Auto-detecting..." readonly style="flex: 1;">
+          <button class="btn secondary" onclick="app.getLocation()" style="width: auto; padding: 12px 16px;">📍</button>
+        </div>
+        <div style="font-size: 12px; color: var(--muted); margin-top: 4px;" id="locationDisplay"></div>
+      </div>
+
+      <div class="form-group">
+        <label>Photo</label>
+        <input type="file" id="photoInput" accept="image/*" capture="environment" style="display: none;" onchange="app.handlePhotoSelect(event)">
+        <button class="btn secondary" onclick="document.getElementById('photoInput').click()">📷 Add Photo</button>
+        <div class="photo-preview" id="photoPreview">
+          <img id="photoImg" src="" alt="Catch photo">
+          <button class="photo-remove" onclick="app.removePhoto()">✕</button>
+        </div>
+      </div>
+
+      <div class="input-row">
+        <div class="form-group">
+          <label>Length</label>
+          <input type="number" id="lengthValue" placeholder="0" step="0.1">
+        </div>
+        <div class="form-group">
+          <label>Unit</label>
+          <select id="lengthUnit">
+            <option value="in">Inches</option>
+            <option value="cm">Centimeters</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="input-row">
+        <div class="form-group">
+          <label>Weight (lb)</label>
+          <input type="number" id="weightLb" placeholder="0" step="1" min="0">
+        </div>
+        <div class="form-group">
+          <label>Weight (oz)</label>
+          <input type="number" id="weightOz" placeholder="0" step="1" min="0" max="15">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Bait/Lure</label>
+        <input type="text" id="bait" placeholder="e.g., Spinnerbait">
+      </div>
+
+      <div class="input-row">
+        <div class="form-group">
+          <label>Weather</label>
+          <select id="weather">
+            <option value="">Select...</option>
+            <option value="Sunny">☀️ Sunny</option>
+            <option value="Cloudy">☁️ Cloudy</option>
+            <option value="Rainy">🌧️ Rainy</option>
+            <option value="Windy">💨 Windy</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Water</label>
+          <select id="water">
+            <option value="">Select...</option>
+            <option value="Clear">💎 Clear</option>
+            <option value="Murky">🌫️ Murky</option>
+            <option value="Stained">🟤 Stained</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Notes</label>
+        <textarea id="notes" placeholder="Add notes about the catch..."></textarea>
+      </div>
+
+      <div class="checkbox-wrapper">
+        <input type="checkbox" id="copyLastCatch">
+        <label for="copyLastCatch" style="margin: 0; cursor: pointer;">Copy settings from last catch</label>
+      </div>
+
+      <div class="btn-group">
+        <button class="btn secondary" onclick="app.clearForm()">Clear</button>
+        <button class="btn" onclick="app.saveCatch()">Save Catch</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Log Screen -->
+  <div class="screen" id="logScreen">
+    <div class="filter-presets">
+      <div class="filter-preset active" onclick="app.applyFilter('all')">All</div>
+      <div class="filter-preset" onclick="app.applyFilter('week')">This Week</div>
+      <div class="filter-preset" onclick="app.applyFilter('month')">This Month</div>
+      <div class="filter-preset" onclick="app.applyFilter('year')">This Year</div>
+      <div class="filter-preset" onclick="app.applyFilter('photos')">📷 With Photos</div>
+    </div>
+    <div id="catchList"></div>
+  </div>
+
+  <!-- Stats Screen -->
+  <div class="screen" id="statsScreen">
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-value" id="totalCatches">0</div>
+        <div class="stat-label">Total Catches</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="totalSpecies">0</div>
+        <div class="stat-label">Species</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="thisMonth">0</div>
+        <div class="stat-label">This Month</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="withPhotos">0</div>
+        <div class="stat-label">With Photos</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-bottom: 16px;">Personal Bests</h3>
+      <div id="personalBests"></div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-bottom: 16px;">By Species</h3>
+      <div id="bySpecies"></div>
+    </div>
+  </div>
+
+  <!-- Tools Screen -->
+  <div class="screen" id="toolsScreen">
+    <div class="tool-item" onclick="app.manualSync()">
+      <div class="tool-info">
+        <h3>Sync Now</h3>
+        <p id="lastSyncTime">Last synced: Never</p>
+      </div>
+      <div class="tool-icon">🔄</div>
+    </div>
+
+    <div class="tool-item" onclick="app.exportData()">
+      <div class="tool-info">
+        <h3>Export Data</h3>
+        <p>Download JSON backup</p>
+      </div>
+      <div class="tool-icon">📥</div>
+    </div>
+
+    <div class="tool-item" onclick="app.exportCSV()">
+      <div class="tool-info">
+        <h3>Export CSV</h3>
+        <p>Export as spreadsheet</p>
+      </div>
+      <div class="tool-icon">📊</div>
+    </div>
+
+    <div class="tool-item" onclick="document.getElementById('importInput').click()">
+      <div class="tool-info">
+        <h3>Import Data</h3>
+        <p>Restore from backup</p>
+      </div>
+      <div class="tool-icon">📤</div>
+    </div>
+
+    <div class="tool-item" onclick="app.logout()" id="logoutBtn" style="display: none;">
+      <div class="tool-info">
+        <h3>Logout</h3>
+        <p>Sign out of account</p>
+      </div>
+      <div class="tool-icon">🚪</div>
+    </div>
+
+    <div style="margin-top: 40px; padding: 20px; text-align: center; color: var(--muted); font-size: 12px;">
+      <p>Fishing Catch Report v2.0</p>
+      <p>Cloud Sync Enabled</p>
+    </div>
+  </div>
+</div>
+
+<!-- Navigation -->
+<nav id="mainNav" style="display: none;">
+  <button class="active" onclick="app.switchScreen('addScreen', this)">
+    <span class="icon">➕</span>
+    <span>Add</span>
+  </button>
+  <button onclick="app.switchScreen('logScreen', this)">
+    <span class="icon">📋</span>
+    <span>Log</span>
+  </button>
+  <button onclick="app.switchScreen('statsScreen', this)">
+    <span class="icon">📊</span>
+    <span>Stats</span>
+  </button>
+  <button onclick="app.switchScreen('toolsScreen', this)">
+    <span class="icon">🔧</span>
+    <span>Tools</span>
+  </button>
+</nav>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- Modal -->
+<div class="modal" id="modal">
+  <div class="modal-content">
+    <div class="modal-header" id="modalHeader"></div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="btn-group">
+      <button class="btn secondary" onclick="app.closeModal()">Cancel</button>
+      <button class="btn" id="modalConfirm">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- Hidden Import Input -->
+<input type="file" id="importInput" accept=".json" style="display: none;" onchange="app.handleImport(event)">
+
+<script>
+// ===== FISHING CATCH REPORT APP WITH SUPABASE =====
+const app = (() => {
+  // State
+  let supabase = null;
+  let currentUser = null;
+  let offlineMode = false;
+  let isOnline = navigator.onLine;
+  let isSyncing = false;
+  let lastSyncTime = null;
+  let currentCatchId = null;
+  let currentFilter = 'all';
+  let currentPhoto = null;
+  let currentLat = null;
+  let currentLng = null;
+  
+  // Database
+  let db = {
+    version: 2,
+    catches: [],
+    pendingOperations: []
+  };
+  
+  // ===== INITIALIZATION =====
+  async function init() {
+    // Initialize Supabase
+    try {
+      supabase = window.supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey);
+    } catch (error) {
+      console.error('Supabase init error:', error);
+      offlineMode = true;
+    }
+    
+    // Load local data
+    loadDB();
+    
+    // Set current date/time
+    setCurrentDateTime();
+    
+    // Check authentication
+    await checkAuthStatus();
+    
+    // Setup listeners
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    
+    // Update sync status
+    updateSyncStatus();
+    
+    // Get location
+    getLocation();
+  }
+  
+  // ===== AUTHENTICATION =====
+  async function checkAuthStatus() {
+    if (offlineMode || !supabase) return;
+    
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session) {
+        currentUser = session.user;
+        showMainApp();
+        await syncFromCloud();
+      } else {
+        showLoginScreen();
+      }
+    } catch (error) {
+      console.error('Auth check error:', error);
+      showLoginScreen();
+    }
+  }
+  
+  async function login() {
+    const email = document.getElementById('loginEmail').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    
+    if (!email || !password) {
+      showLoginError('Please enter email and password');
+      return;
+    }
+    
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      
+      if (error) throw error;
+      
+      currentUser = data.user;
+      hideLoginError();
+      showMainApp();
+      await syncFromCloud();
+      await offerCloudUpload();
+    } catch (error) {
+      showLoginError(error.message);
+    }
+  }
+  
+  async function signup() {
+    const email = document.getElementById('loginEmail').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    
+    if (!email || !password) {
+      showLoginError('Please enter email and password');
+      return;
+    }
+    
+    if (password.length < 6) {
+      showLoginError('Password must be at least 6 characters');
+      return;
+    }
+    
+    try {
+      const { data, error } = await supabase.auth.signUp({ email, password });
+      
+      if (error) throw error;
+      
+      document.getElementById('loginError').classList.add('show');
+      document.getElementById('loginError').textContent = 'Check your email to confirm your account!';
+      document.getElementById('loginError').style.color = 'var(--ok)';
+      
+      setTimeout(() => hideLoginError(), 5000);
+    } catch (error) {
+      showLoginError(error.message);
+    }
+  }
+  
+  async function sendMagicLink() {
+    const email = document.getElementById('loginEmail').value.trim();
+    
+    if (!email) {
+      showLoginError('Please enter your email');
+      return;
+    }
+    
+    try {
+      const { error } = await supabase.auth.signInWithOtp({ 
+        email,
+        options: { emailRedirectTo: window.location.href }
+      });
+      
+      if (error) throw error;
+      
+      document.getElementById('loginError').classList.add('show');
+      document.getElementById('loginError').textContent = 'Magic link sent! Check your email.';
+      document.getElementById('loginError').style.color = 'var(--ok)';
+      
+      setTimeout(() => hideLoginError(), 5000);
+    } catch (error) {
+      showLoginError(error.message);
+    }
+  }
+  
+  async function logout() {
+    if (!confirm('Are you sure you want to logout?')) return;
+    
+    if (!offlineMode && supabase) {
+      await supabase.auth.signOut();
+    }
+    
+    currentUser = null;
+    db.catches = [];
+    persistDB();
+    showLoginScreen();
+  }
+  
+  function continueOffline() {
+    offlineMode = true;
+    hideLoginError();
+    showMainApp();
+    showToast('Running in offline mode. Data stored locally only.', 'success');
+  }
+  
+  function showLoginScreen() {
+    document.getElementById('loginScreen').classList.add('active');
+    document.getElementById('mainApp').style.display = 'none';
+    document.getElementById('mainNav').style.display = 'none';
+  }
+  
+  function showMainApp() {
+    document.getElementById('loginScreen').classList.remove('active');
+    document.getElementById('mainApp').style.display = 'block';
+    document.getElementById('mainNav').style.display = 'flex';
+    
+    if (currentUser || offlineMode) {
+      document.getElementById('logoutBtn').style.display = 'flex';
+    }
+    
+    renderCatchList();
+    renderStats();
+  }
+  
+  function showLoginError(msg) {
+    const el = document.getElementById('loginError');
+    el.textContent = msg;
+    el.style.color = 'var(--danger)';
+    el.classList.add('show');
+  }
+  
+  function hideLoginError() {
+    document.getElementById('loginError').classList.remove('show');
+  }
+  
+  // ===== DATABASE =====
+  function loadDB() {
+    try {
+      const stored = localStorage.getItem('fishingCatchDB');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        db = { ...db, ...parsed };
+      }
+    } catch (error) {
+      console.error('Load DB error:', error);
+    }
+  }
+  
+  function persistDB() {
+    try {
+      localStorage.setItem('fishingCatchDB', JSON.stringify(db));
+    } catch (error) {
+      console.error('Persist DB error:', error);
+    }
+  }
+  
+  // ===== SUPABASE SYNC =====
+  async function syncFromCloud() {
+    if (offlineMode || !supabase || !currentUser || isSyncing) return;
+    
+    try {
+      isSyncing = true;
+      updateSyncStatus();
+      
+      // Fetch catches from Supabase
+      const { data, error } = await supabase
+        .from('catches')
+        .select('*')
+        .eq('user_id', currentUser.id)
+        .order('caught_at', { ascending: false });
+      
+      if (error) throw error;
+      
+      // Convert Supabase format to app format
+      const cloudCatches = data.map(c => ({
+        id: c.id.toString(),
+        species: c.species,
+        datetimeISO: c.caught_at,
+        lat: c.lat,
+        lng: c.lng,
+        photoDataUrl: null, // Will be loaded on demand
+        photoPath: c.photo_path,
+        length: {
+          value: c.length_value,
+          unit: c.length_unit
+        },
+        weight: {
+          totalOz: c.weight_total_oz,
+          displayValue: c.weight_lb + (c.weight_oz / 16),
+          displayUnit: 'lb'
+        },
+        bait: c.bait,
+        weather: c.weather,
+        water: c.water,
+        notes: c.notes,
+        createdAtISO: c.created_at,
+        updatedAtISO: c.created_at,
+        synced: true
+      }));
+      
+      // Merge with local catches
+      const localIds = db.catches.map(c => c.id);
+      const cloudIds = cloudCatches.map(c => c.id);
+      
+      // Keep local-only catches
+      const localOnly = db.catches.filter(c => !cloudIds.includes(c.id));
+      
+      // Merge
+      db.catches = [...cloudCatches, ...localOnly];
+      persistDB();
+      
+      lastSyncTime = new Date();
+      isSyncing = false;
+      updateSyncStatus();
+      renderCatchList();
+      renderStats();
+      
+      showToast('Synced successfully!', 'success');
+    } catch (error) {
+      console.error('Sync from cloud error:', error);
+      isSyncing = false;
+      updateSyncStatus();
+      showToast('Sync failed: ' + error.message, 'error');
+    }
+  }
+  
+  async function syncToCloud(catchData) {
+    if (offlineMode || !supabase || !currentUser) {
+      // Add to pending operations
+      db.pendingOperations.push({
+        type: 'create',
+        data: catchData,
+        timestamp: new Date().toISOString()
+      });
+      persistDB();
+      return;
+    }
+    
+    try {
+      // Upload photo if exists
+      let photoPath = null;
+      if (catchData.photoDataUrl) {
+        photoPath = await uploadPhoto(catchData.id, catchData.photoDataUrl);
+      }
+      
+      // Insert into Supabase
+      const { error } = await supabase.from('catches').insert({
+        id: parseInt(catchData.id),
+        user_id: currentUser.id,
+        species: catchData.species,
+        caught_at: catchData.datetimeISO,
+        lat: catchData.lat,
+        lng: catchData.lng,
+        photo_path: photoPath,
+        length_value: catchData.length?.value || null,
+        length_unit: catchData.length?.unit || null,
+        weight_lb: Math.floor((catchData.weight?.totalOz || 0) / 16),
+        weight_oz: (catchData.weight?.totalOz || 0) % 16,
+        weight_total_oz: catchData.weight?.totalOz || null,
+        bait: catchData.bait,
+        weather: catchData.weather,
+        water: catchData.water,
+        notes: catchData.notes
+      });
+      
+      if (error) throw error;
+      
+      // Mark as synced
+      const catchIndex = db.catches.findIndex(c => c.id === catchData.id);
+      if (catchIndex !== -1) {
+        db.catches[catchIndex].synced = true;
+        db.catches[catchIndex].photoPath = photoPath;
+        persistDB();
+      }
+      
+      showToast('Synced to cloud!', 'success');
+    } catch (error) {
+      console.error('Sync to cloud error:', error);
+      showToast('Cloud sync failed, saved locally', 'error');
+    }
+  }
+  
+  async function uploadPhoto(catchId, dataUrl) {
+    if (!supabase || !currentUser) return null;
+    
+    try {
+      // Convert base64 to blob
+      const response = await fetch(dataUrl);
+      const blob = await response.blob();
+      
+      const fileName = `${currentUser.id}/${catchId}.jpg`;
+      
+      const { data, error } = await supabase.storage
+        .from(SUPABASE_CONFIG.storageBucket)
+        .upload(fileName, blob, {
+          contentType: 'image/jpeg',
+          upsert: true
+        });
+      
+      if (error) throw error;
+      
+      return fileName;
+    } catch (error) {
+      console.error('Photo upload error:', error);
+      return null;
+    }
+  }
+  
+  async function offerCloudUpload() {
+    const localCatches = db.catches.filter(c => !c.synced);
+    
+    if (localCatches.length === 0) return;
+    
+    if (confirm(`Upload ${localCatches.length} local catches to cloud?`)) {
+      for (const catch_ of localCatches) {
+        await syncToCloud(catch_);
+      }
+      showToast('All catches uploaded!', 'success');
+    }
+  }
+  
+  async function manualSync() {
+    if (offlineMode) {
+      showToast('Offline mode - cloud sync disabled', 'error');
+      return;
+    }
+    
+    if (!isOnline) {
+      showToast('No internet connection', 'error');
+      return;
+    }
+    
+    showToast('Syncing...', 'success');
+    await syncFromCloud();
+  }
+  
+  // ===== NETWORK STATUS =====
+  function handleOnline() {
+    isOnline = true;
+    updateSyncStatus();
+    showToast('Connection restored', 'success');
+    
+    if (!offlineMode && currentUser) {
+      syncFromCloud();
+    }
+  }
+  
+  function handleOffline() {
+    isOnline = false;
+    updateSyncStatus();
+    showToast('Offline - changes saved locally', 'error');
+  }
+  
+  function updateSyncStatus() {
+    const dot = document.getElementById('syncDot');
+    const status = document.getElementById('syncStatus');
+    
+    if (offlineMode) {
+      dot.className = 'sync-dot';
+      status.textContent = 'Offline Mode';
+    } else if (isSyncing) {
+      dot.className = 'sync-dot syncing';
+      status.textContent = 'Syncing...';
+    } else if (isOnline && currentUser) {
+      dot.className = 'sync-dot online';
+      status.textContent = 'Synced';
+    } else if (!isOnline) {
+      dot.className = 'sync-dot';
+      status.textContent = 'Offline';
+    } else {
+      dot.className = 'sync-dot';
+      status.textContent = 'Local Only';
+    }
+    
+    // Update last sync time
+    if (lastSyncTime) {
+      const elapsed = Math.floor((Date.now() - lastSyncTime) / 1000 / 60);
+      document.getElementById('lastSyncTime').textContent = 
+        `Last synced: ${elapsed === 0 ? 'Just now' : elapsed + ' min ago'}`;
+    }
+  }
+  
+  // ===== FORM HANDLING =====
+  function setCurrentDateTime() {
+    const now = new Date();
+    const offset = now.getTimezoneOffset() * 60000;
+    const localISO = new Date(now - offset).toISOString().slice(0, 16);
+    document.getElementById('datetime').value = localISO;
+  }
+  
+  async function getLocation() {
+    if (!navigator.geolocation) {
+      document.getElementById('location').placeholder = 'Geolocation not supported';
+      return;
+    }
+    
+    document.getElementById('location').placeholder = 'Getting location...';
+    
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        currentLat = position.coords.latitude;
+        currentLng = position.coords.longitude;
+        document.getElementById('location').value = `${currentLat.toFixed(6)}, ${currentLng.toFixed(6)}`;
+        document.getElementById('locationDisplay').textContent = 
+          `Lat: ${currentLat.toFixed(6)}, Lng: ${currentLng.toFixed(6)}`;
+      },
+      (error) => {
+        document.getElementById('location').placeholder = 'Location unavailable';
+        console.error('Geolocation error:', error);
+      }
+    );
+  }
+  
+  async function handlePhotoSelect(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    // Compress and convert to base64
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        
+        // Resize if needed
+        const maxSize = 800;
+        if (width > maxSize || height > maxSize) {
+          if (width > height) {
+            height = Math.round((height / width) * maxSize);
+            width = maxSize;
+          } else {
+            width = Math.round((width / height) * maxSize);
+            height = maxSize;
+          }
+        }
+        
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        currentPhoto = canvas.toDataURL('image/jpeg', 0.8);
+        
+        document.getElementById('photoImg').src = currentPhoto;
+        document.getElementById('photoPreview').classList.add('show');
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+  
+  function removePhoto() {
+    currentPhoto = null;
+    document.getElementById('photoPreview').classList.remove('show');
+    document.getElementById('photoInput').value = '';
+  }
+  
+  function clearForm() {
+    document.getElementById('species').value = '';
+    document.getElementById('lengthValue').value = '';
+    document.getElementById('lengthUnit').value = 'in';
+    document.getElementById('weightLb').value = '';
+    document.getElementById('weightOz').value = '';
+    document.getElementById('bait').value = '';
+    document.getElementById('weather').value = '';
+    document.getElementById('water').value = '';
+    document.getElementById('notes').value = '';
+    removePhoto();
+    setCurrentDateTime();
+  }
+  
+  async function saveCatch() {
+    const species = document.getElementById('species').value.trim();
+    const datetime = document.getElementById('datetime').value;
+    
+    if (!species) {
+      showToast('Please enter species', 'error');
+      document.getElementById('species').classList.add('error');
+      return;
+    }
+    
+    if (!datetime) {
+      showToast('Please select date and time', 'error');
+      document.getElementById('datetime').classList.add('error');
+      return;
+    }
+    
+    // Remove error classes
+    document.getElementById('species').classList.remove('error');
+    document.getElementById('datetime').classList.remove('error');
+    
+    const lengthValue = parseFloat(document.getElementById('lengthValue').value) || null;
+    const lengthUnit = document.getElementById('lengthUnit').value;
+    const weightLb = parseInt(document.getElementById('weightLb').value) || 0;
+    const weightOz = parseInt(document.getElementById('weightOz').value) || 0;
+    const totalOz = (weightLb * 16) + weightOz;
+    
+    const catchData = {
+      id: currentCatchId || Date.now().toString(),
+      species,
+      datetimeISO: new Date(datetime).toISOString(),
+      lat: currentLat,
+      lng: currentLng,
+      photoDataUrl: currentPhoto,
+      photoPath: null,
+      length: lengthValue ? { value: lengthValue, unit: lengthUnit } : null,
+      weight: totalOz > 0 ? {
+        totalOz,
+        displayValue: weightLb + (weightOz / 16),
+        displayUnit: 'lb'
+      } : null,
+      bait: document.getElementById('bait').value.trim() || null,
+      weather: document.getElementById('weather').value || null,
+      water: document.getElementById('water').value || null,
+      notes: document.getElementById('notes').value.trim() || null,
+      createdAtISO: new Date().toISOString(),
+      updatedAtISO: new Date().toISOString(),
+      synced: false
+    };
+    
+    if (currentCatchId) {
+      // Update existing
+      const index = db.catches.findIndex(c => c.id === currentCatchId);
+      if (index !== -1) {
+        db.catches[index] = catchData;
+      }
+      currentCatchId = null;
+    } else {
+      // Add new
+      db.catches.unshift(catchData);
+    }
+    
+    persistDB();
+    
+    // Sync to cloud
+    if (!offlineMode && currentUser && isOnline) {
+      await syncToCloud(catchData);
+    }
+    
+    showToast('Catch saved!', 'success');
+    clearForm();
+    renderCatchList();
+    renderStats();
+  }
+  
+  // ===== CATCH LIST =====
+  function renderCatchList() {
+    const container = document.getElementById('catchList');
+    const filtered = getFilteredCatches();
+    
+    if (filtered.length === 0) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <div class="icon">🎣</div>
+          <p>No catches yet. Start logging your catches!</p>
+        </div>
+      `;
+      return;
+    }
+    
+    container.innerHTML = filtered.map(c => {
+      const date = new Date(c.datetimeISO);
+      const dateStr = date.toLocaleDateString();
+      const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      
+      const weightStr = c.weight ? 
+        `${Math.floor(c.weight.totalOz / 16)} lb ${c.weight.totalOz % 16} oz` : 
+        'Not recorded';
+      
+      const lengthStr = c.length ? 
+        `${c.length.value} ${c.length.unit}` : 
+        'Not recorded';
+      
+      const syncBadge = c.synced ? 
+        '<span class="sync-badge synced">☁️ Synced</span>' : 
+        '<span class="sync-badge pending">📱 Local</span>';
+      
+      const photoThumb = c.photoDataUrl || c.photoPath ? 
+        `<img src="${c.photoDataUrl || ''}" class="catch-photo-thumb" alt="Catch">` : '';
+      
+      return `
+        <div class="catch-item" onclick="app.editCatch('${c.id}')">
+          <div class="catch-header">
+            <div>
+              <div class="catch-species">${c.species}${syncBadge}</div>
+              <div class="catch-size">${weightStr} • ${lengthStr}</div>
+            </div>
+            ${photoThumb}
+          </div>
+          <div class="catch-details">
+            <div>📅 ${dateStr}</div>
+            <div>🕐 ${timeStr}</div>
+            ${c.bait ? `<div>🎣 ${c.bait}</div>` : ''}
+            ${c.weather ? `<div>${c.weather}</div>` : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+  
+  function getFilteredCatches() {
+    const now = new Date();
+    
+    switch (currentFilter) {
+      case 'week':
+        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        return db.catches.filter(c => new Date(c.datetimeISO) >= weekAgo);
+      
+      case 'month':
+        const monthAgo = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+        return db.catches.filter(c => new Date(c.datetimeISO) >= monthAgo);
+      
+      case 'year':
+        const yearAgo = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+        return db.catches.filter(c => new Date(c.datetimeISO) >= yearAgo);
+      
+      case 'photos':
+        return db.catches.filter(c => c.photoDataUrl || c.photoPath);
+      
+      default:
+        return db.catches;
+    }
+  }
+  
+  function applyFilter(filter) {
+    currentFilter = filter;
+    
+    // Update UI
+    document.querySelectorAll('.filter-preset').forEach(el => {
+      el.classList.remove('active');
+    });
+    event.target.classList.add('active');
+    
+    renderCatchList();
+  }
+  
+  function editCatch(id) {
+    const catch_ = db.catches.find(c => c.id === id);
+    if (!catch_) return;
+    
+    currentCatchId = id;
+    
+    // Populate form
+    document.getElementById('species').value = catch_.species;
+    
+    const date = new Date(catch_.datetimeISO);
+    const offset = date.getTimezoneOffset() * 60000;
+    const localISO = new Date(date - offset).toISOString().slice(0, 16);
+    document.getElementById('datetime').value = localISO;
+    
+    if (catch_.lat && catch_.lng) {
+      currentLat = catch_.lat;
+      currentLng = catch_.lng;
+      document.getElementById('location').value = `${catch_.lat.toFixed(6)}, ${catch_.lng.toFixed(6)}`;
+    }
+    
+    if (catch_.photoDataUrl) {
+      currentPhoto = catch_.photoDataUrl;
+      document.getElementById('photoImg').src = currentPhoto;
+      document.getElementById('photoPreview').classList.add('show');
+    }
+    
+    document.getElementById('lengthValue').value = catch_.length?.value || '';
+    document.getElementById('lengthUnit').value = catch_.length?.unit || 'in';
+    
+    if (catch_.weight) {
+      document.getElementById('weightLb').value = Math.floor(catch_.weight.totalOz / 16);
+      document.getElementById('weightOz').value = catch_.weight.totalOz % 16;
+    }
+    
+    document.getElementById('bait').value = catch_.bait || '';
+    document.getElementById('weather').value = catch_.weather || '';
+    document.getElementById('water').value = catch_.water || '';
+    document.getElementById('notes').value = catch_.notes || '';
+    
+    // Switch to add screen
+    switchScreen('addScreen', document.querySelector('nav button'));
+    showToast('Editing catch', 'success');
+  }
+  
+  // ===== STATS =====
+  function renderStats() {
+    const now = new Date();
+    const thisMonth = db.catches.filter(c => {
+      const date = new Date(c.datetimeISO);
+      return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+    });
+    
+    const species = [...new Set(db.catches.map(c => c.species))];
+    const withPhotos = db.catches.filter(c => c.photoDataUrl || c.photoPath);
+    
+    document.getElementById('totalCatches').textContent = db.catches.length;
+    document.getElementById('totalSpecies').textContent = species.length;
+    document.getElementById('thisMonth').textContent = thisMonth.length;
+    document.getElementById('withPhotos').textContent = withPhotos.length;
+    
+    // Personal bests
+    const pbContainer = document.getElementById('personalBests');
+    const bestBySpecies = {};
+    
+    db.catches.forEach(c => {
+      if (!c.weight) return;
+      if (!bestBySpecies[c.species] || c.weight.totalOz > bestBySpecies[c.species].weight.totalOz) {
+        bestBySpecies[c.species] = c;
+      }
+    });
+    
+    const pbHtml = Object.values(bestBySpecies).map(c => {
+      const weightStr = `${Math.floor(c.weight.totalOz / 16)} lb ${c.weight.totalOz % 16} oz`;
+      return `<div style="padding: 12px; border-bottom: 1px solid rgba(52,211,153,0.1);">
+        <div style="font-weight: 600; color: var(--ok);">${c.species}</div>
+        <div style="font-size: 14px; color: var(--muted); margin-top: 4px;">${weightStr}</div>
+      </div>`;
+    }).join('');
+    
+    pbContainer.innerHTML = pbHtml || '<p style="color: var(--muted); text-align: center; padding: 20px;">No personal bests yet</p>';
+    
+    // By species
+    const speciesContainer = document.getElementById('bySpecies');
+    const bySpecies = {};
+    
+    db.catches.forEach(c => {
+      bySpecies[c.species] = (bySpecies[c.species] || 0) + 1;
+    });
+    
+    const speciesHtml = Object.entries(bySpecies)
+      .sort((a, b) => b[1] - a[1])
+      .map(([species, count]) => `
+        <div style="padding: 12px; border-bottom: 1px solid rgba(52,211,153,0.1);">
+          <div style="display: flex; justify-content: space-between;">
+            <span style="font-weight: 600;">${species}</span>
+            <span style="color: var(--ok);">${count}</span>
+          </div>
+        </div>
+      `).join('');
+    
+    speciesContainer.innerHTML = speciesHtml || '<p style="color: var(--muted); text-align: center; padding: 20px;">No catches yet</p>';
+  }
+  
+  // ===== EXPORT/IMPORT =====
+  function exportData() {
+    const dataStr = JSON.stringify(db, null, 2);
+    const blob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `fishing-catches-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('Data exported!', 'success');
+  }
+  
+  function exportCSV() {
+    const headers = ['Date', 'Time', 'Species', 'Length', 'Weight (oz)', 'Bait', 'Weather', 'Water', 'Notes', 'Lat', 'Lng'];
+    const rows = db.catches.map(c => {
+      const date = new Date(c.datetimeISO);
+      return [
+        date.toLocaleDateString(),
+        date.toLocaleTimeString(),
+        c.species,
+        c.length ? `${c.length.value} ${c.length.unit}` : '',
+        c.weight?.totalOz || '',
+        c.bait || '',
+        c.weather || '',
+        c.water || '',
+        c.notes || '',
+        c.lat || '',
+        c.lng || ''
+      ];
+    });
+    
+    const csv = [headers, ...rows]
+      .map(row => row.map(cell => `"${cell}"`).join(','))
+      .join('\n');
+    
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `fishing-catches-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('CSV exported!', 'success');
+  }
+  
+  function handleImport(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const imported = JSON.parse(e.target.result);
+        
+        if (!imported.catches || !Array.isArray(imported.catches)) {
+          throw new Error('Invalid file format');
+        }
+        
+        if (confirm(`Import ${imported.catches.length} catches? This will merge with existing data.`)) {
+          db.catches = [...db.catches, ...imported.catches];
+          persistDB();
+          renderCatchList();
+          renderStats();
+          showToast('Data imported successfully!', 'success');
+        }
+      } catch (error) {
+        showToast('Import failed: ' + error.message, 'error');
+      }
+    };
+    reader.readAsText(file);
+  }
+  
+  // ===== UI HELPERS =====
+  function switchScreen(screenId, button) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(screenId).classList.add('active');
+    
+    document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+    button.classList.add('active');
+    
+    if (screenId === 'logScreen') renderCatchList();
+    if (screenId === 'statsScreen') renderStats();
+  }
+  
+  function showToast(message, type = 'success') {
+    const toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.className = 'toast ' + type;
+    toast.classList.add('show');
+    
+    setTimeout(() => {
+      toast.classList.remove('show');
+    }, 3000);
+  }
+  
+  function closeModal() {
+    document.getElementById('modal').classList.remove('active');
+  }
+  
+  // ===== PUBLIC API =====
+  return {
+    init,
+    login,
+    signup,
+    sendMagicLink,
+    logout,
+    continueOffline,
+    getLocation,
+    handlePhotoSelect,
+    removePhoto,
+    clearForm,
+    saveCatch,
+    editCatch,
+    applyFilter,
+    switchScreen,
+    manualSync,
+    exportData,
+    exportCSV,
+    handleImport,
+    closeModal
+  };
+})();
+
+// Initialize app when DOM is ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', app.init);
+} else {
+  app.init();
+}
+</script>
+
+</body>
+</html>
