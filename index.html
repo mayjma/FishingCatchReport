@@ -635,7 +635,24 @@
       
       <div class="form-group">
         <label>Species *</label>
-        <input type="text" id="species" placeholder="e.g., Pike, Bass, Trout">
+        <select id="species">
+          <option value="">Select species...</option>
+          <option value="Roach">Roach</option>
+          <option value="Rudd">Rudd</option>
+          <option value="Perch">Perch</option>
+          <option value="Bream">Bream</option>
+          <option value="Tench">Tench</option>
+          <option value="Chub">Chub</option>
+          <option value="Dace">Dace</option>
+          <option value="Gudgeon">Gudgeon</option>
+          <option value="Common Carp">Common Carp</option>
+          <option value="Mirror Carp">Mirror Carp</option>
+          <option value="Crucian Carp">Crucian Carp</option>
+          <option value="Barbel">Barbel</option>
+          <option value="Pike">Pike</option>
+          <option value="Bleak">Bleak</option>
+          <option value="Eel">Eel</option>
+        </select>
       </div>
 
       <div class="form-group">
@@ -689,7 +706,20 @@
 
       <div class="form-group">
         <label>Bait/Lure</label>
-        <input type="text" id="bait" placeholder="e.g., Spinnerbait">
+        <select id="bait">
+          <option value="">Select bait/lure...</option>
+          <option value="Maggots">Maggots</option>
+          <option value="Worms">Worms</option>
+          <option value="Bread">Bread</option>
+          <option value="Sweetcorn">Sweetcorn</option>
+          <option value="Casters">Casters</option>
+          <option value="Pellets">Pellets</option>
+          <option value="Groundbait">Groundbait</option>
+          <option value="Boilies">Boilies</option>
+          <option value="Paste">Paste</option>
+          <option value="Meat">Meat</option>
+          <option value="Lure">Lure</option>
+        </select>
       </div>
 
       <div class="input-row">
@@ -1430,7 +1460,7 @@ const app = (() => {
     const datetime = document.getElementById('datetime').value;
     
     if (!species) {
-      showToast('Please enter species', 'error');
+      showToast('Please select a species', 'error');
       document.getElementById('species').classList.add('error');
       return;
     }
