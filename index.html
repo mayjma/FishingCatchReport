@@ -487,13 +487,17 @@
       padding: 16px;
       border-radius: 12px;
       box-shadow: 0 4px 24px rgba(0,0,0,0.3);
-      transform: translateY(-200%);
-      transition: transform 0.3s ease;
+      transform: translateY(-250%);
+      opacity: 0;
+      transition: transform 0.4s cubic-bezier(0.4, 0.0, 0.2, 1), opacity 0.4s ease;
       z-index: 1000;
       border: 1px solid rgba(52,211,153,0.2);
     }
     
-    .toast.show { transform: translateY(0); }
+    .toast.show { 
+      transform: translateY(0); 
+      opacity: 1;
+    }
     .toast.error { border-color: var(--danger); background: rgba(251,113,133,0.1); }
     .toast.success { border-color: var(--ok); background: rgba(52,211,153,0.1); }
     
@@ -1768,11 +1772,18 @@ const app = (() => {
   
   function showToast(message, type = 'success') {
     const toast = document.getElementById('toast');
+    
+    // Clear any existing timeout
+    if (toast.hideTimeout) {
+      clearTimeout(toast.hideTimeout);
+    }
+    
     toast.textContent = message;
     toast.className = 'toast ' + type;
     toast.classList.add('show');
     
-    setTimeout(() => {
+    // Auto-hide after 3 seconds
+    toast.hideTimeout = setTimeout(() => {
       toast.classList.remove('show');
     }, 3000);
   }
