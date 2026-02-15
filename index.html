@@ -391,6 +391,33 @@
       object-fit: cover;
     }
     
+    .catch-media {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      align-items: flex-end;
+    }
+    
+    .map-icon-btn {
+      width: 60px;
+      height: 32px;
+      background: var(--ok);
+      color: var(--bg);
+      border: none;
+      border-radius: 8px;
+      font-size: 18px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+    
+    .map-icon-btn:active {
+      transform: scale(0.95);
+      background: #2db87d;
+    }
+    
     .sync-badge {
       padding: 4px 8px;
       border-radius: 6px;
@@ -1630,6 +1657,12 @@ const app = (() => {
       const photoThumb = c.photoDataUrl || c.photoPath ? 
         `<img src="${c.photoDataUrl || ''}" class="catch-photo-thumb" alt="Catch">` : '';
       
+      const mapButton = c.lat && c.lng ? 
+        `<button class="map-icon-btn" onclick="event.stopPropagation(); app.openMap(${c.lat}, ${c.lng})" title="View on map">📍</button>` : '';
+      
+      const mediaSection = (photoThumb || mapButton) ? 
+        `<div class="catch-media">${photoThumb}${mapButton}</div>` : '';
+      
       return `
         <div class="catch-item" onclick="app.editCatch('${c.id}')">
           <div class="catch-header">
@@ -1637,7 +1670,7 @@ const app = (() => {
               <div class="catch-species">${c.species}${syncBadge}</div>
               <div class="catch-size">${weightStr} • ${lengthStr}</div>
             </div>
-            ${photoThumb}
+            ${mediaSection}
           </div>
           <div class="catch-details">
             <div>📅 ${dateStr}</div>
@@ -1684,6 +1717,12 @@ const app = (() => {
     event.target.classList.add('active');
     
     renderCatchList();
+  }
+  
+  function openMap(lat, lng) {
+    // Open Google Maps with the coordinates
+    const url = `https://www.google.com/maps?q=${lat},${lng}`;
+    window.open(url, '_blank');
   }
   
   function editCatch(id) {
@@ -1915,6 +1954,7 @@ const app = (() => {
     deleteCatch,
     editCatch,
     applyFilter,
+    openMap,
     switchScreen,
     manualSync,
     exportData,
