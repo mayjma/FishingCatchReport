@@ -267,6 +267,13 @@
       font-family: inherit;
     }
     
+    input[type="datetime-local"] {
+      max-width: 100%;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      appearance: none;
+    }
+    
     input:focus, select:focus, textarea:focus {
       outline: none;
       border-color: var(--ok);
@@ -671,7 +678,7 @@
 
       <div class="form-group">
         <label>Photo</label>
-        <input type="file" id="photoInput" accept="image/*" capture="environment" style="display: none;" onchange="app.handlePhotoSelect(event)">
+        <input type="file" id="photoInput" accept="image/*" style="display: none;" onchange="app.handlePhotoSelect(event)">
         <button class="btn secondary" onclick="document.getElementById('photoInput').click()">📷 Add Photo</button>
         <div class="photo-preview" id="photoPreview">
           <img id="photoImg" src="" alt="Catch photo">
