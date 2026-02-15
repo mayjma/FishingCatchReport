@@ -1654,8 +1654,10 @@ const app = (() => {
         '<span class="sync-badge synced">☁️ Synced</span>' : 
         '<span class="sync-badge pending">📱 Local</span>';
       
-      const photoThumb = c.photoDataUrl || c.photoPath ? 
-        `<img src="${c.photoDataUrl || ''}" class="catch-photo-thumb" alt="Catch">` : '';
+      // Only show photo if we have the actual base64 data (photoDataUrl)
+      // photoPath alone means it's in cloud storage but not cached locally
+      const photoThumb = c.photoDataUrl ? 
+        `<img src="${c.photoDataUrl}" class="catch-photo-thumb" alt="Catch">` : '';
       
       const mapButton = c.lat && c.lng ? 
         `<button class="map-icon-btn" onclick="event.stopPropagation(); app.openMap(${c.lat}, ${c.lng})" title="View on map">📍</button>` : '';
