@@ -1219,6 +1219,7 @@ const app = (() => {
           },
           bait: c.bait,
           weather: c.weather,
+          airPressure: c.air_pressure,
           water: c.water,
           notes: c.notes,
           createdAtISO: c.created_at,
@@ -1288,6 +1289,7 @@ const app = (() => {
         weight_total_oz: catchData.weight?.totalOz || null,
         bait: catchData.bait,
         weather: catchData.weather,
+        air_pressure: catchData.airPressure,
         water: catchData.water,
         notes: catchData.notes
       });
@@ -1511,13 +1513,12 @@ const app = (() => {
         default: weatherIcon = '🌤️';
       }
       
-      // Air pressure in hPa (millibars) and inHg
-      const pressureHpa = data.main.pressure;
-      const pressureInHg = (pressureHpa * 0.02953).toFixed(2);
+      // Air pressure in hPa (millibars) - show as mb with 2 decimal places
+      const pressureMb = data.main.pressure.toFixed(2);
       
       // Update fields
       document.getElementById('weather').value = `${temp}°F - ${weatherIcon} ${condition}`;
-      document.getElementById('airPressure').value = `${pressureInHg} inHg (${pressureHpa} hPa)`;
+      document.getElementById('airPressure').value = `${pressureMb} mb`;
       
     } catch (error) {
       console.error('Weather fetch error:', error);
