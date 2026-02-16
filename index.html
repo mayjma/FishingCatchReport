@@ -16,6 +16,9 @@
       anonKey: 'sb_publishable_6nX2kXvvJra4uNEv-PGzWA_FCz_uFF3',
       storageBucket: 'catch-photos'
     };
+    
+    // OpenWeatherMap API
+    const WEATHER_API_KEY = 'a0b219e0e6f618028ed5f6a0967911c4';
   </script>
   
   <style>
@@ -758,15 +761,16 @@
 
       <div class="input-row">
         <div class="form-group">
-          <label>Weather</label>
-          <select id="weather">
-            <option value="">Select...</option>
-            <option value="Sunny">☀️ Sunny</option>
-            <option value="Cloudy">☁️ Cloudy</option>
-            <option value="Rainy">🌧️ Rainy</option>
-            <option value="Windy">💨 Windy</option>
-          </select>
+          <label>Weather (auto)</label>
+          <input type="text" id="weather" placeholder="Getting weather..." readonly>
         </div>
+        <div class="form-group">
+          <label>Air Pressure</label>
+          <input type="text" id="airPressure" placeholder="Getting pressure..." readonly>
+        </div>
+      </div>
+
+      <div class="input-row">
         <div class="form-group">
           <label>Water</label>
           <select id="water">
@@ -775,6 +779,9 @@
             <option value="Murky">🌫️ Murky</option>
             <option value="Stained">🟤 Stained</option>
           </select>
+        </div>
+        <div class="form-group">
+          <!-- Empty space for alignment -->
         </div>
       </div>
 
@@ -1440,20 +1447,78 @@ const app = (() => {
     }
     
     document.getElementById('location').placeholder = 'Getting location...';
+    document.getElementById('weather').placeholder = 'Getting weather...';
+    document.getElementById('airPressure').placeholder = 'Getting pressure...';
     
     navigator.geolocation.getCurrentPosition(
-      (position) => {
+      async (position) => {
         currentLat = position.coords.latitude;
         currentLng = position.coords.longitude;
         document.getElementById('location').value = `${currentLat.toFixed(6)}, ${currentLng.toFixed(6)}`;
         document.getElementById('locationDisplay').textContent = 
           `Lat: ${currentLat.toFixed(6)}, Lng: ${currentLng.toFixed(6)}`;
+        
+        // Fetch weather data
+        await fetchWeatherData(currentLat, currentLng);
       },
       (error) => {
         document.getElementById('location').placeholder = 'Location unavailable';
+        document.getElementById('weather').placeholder = 'Weather unavailable';
+        document.getElementById('airPressure').placeholder = 'Pressure unavailable';
         console.error('Geolocation error:', error);
       }
     );
+  }
+  
+  async function fetchWeatherData(lat, lng) {
+    if (!WEATHER_API_KEY || WEATHER_API_KEY === 'YOUR_OPENWEATHERMAP_API_KEY') {
+      document.getElementById('weather').value = 'API key needed';
+      document.getElementById('airPressure').value = 'API key needed';
+      console.warn('OpenWeatherMap API key not configured');
+      return;
+    }
+    
+    try {
+      const response = await fetch(
+        `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lng}&units=imperial&appid=${WEATHER_API_KEY}`
+      );
+      
+      if (!response.ok) throw new Error('Weather API error');
+      
+      const data = await response.json();
+      
+      // Temperature in Fahrenheit
+      const temp = Math.round(data.main.temp);
+      
+      // Weather condition (map to our icons)
+      const condition = data.weather[0].main;
+      let weatherIcon = '';
+      switch(condition) {
+        case 'Clear': weatherIcon = '☀️'; break;
+        case 'Clouds': weatherIcon = '☁️'; break;
+        case 'Rain': weatherIcon = '🌧️'; break;
+        case 'Drizzle': weatherIcon = '🌧️'; break;
+        case 'Thunderstorm': weatherIcon = '⛈️'; break;
+        case 'Snow': weatherIcon = '❄️'; break;
+        case 'Mist':
+        case 'Fog': weatherIcon = '🌫️'; break;
+        default: weatherIcon = '🌤️';
+      }
+      
+      // Air pressure in hPa (millibars) and inHg
+      const pressureHpa = data.main.pressure;
+      const pressureInHg = (pressureHpa * 0.02953).toFixed(2);
+      
+      // Update fields
+      document.getElementById('weather').value = `${temp}°F - ${weatherIcon} ${condition}`;
+      document.getElementById('airPressure').value = `${pressureInHg} inHg (${pressureHpa} hPa)`;
+      
+    } catch (error) {
+      console.error('Weather fetch error:', error);
+      document.getElementById('weather').value = 'Weather unavailable';
+      document.getElementById('airPressure').value = 'Pressure unavailable';
+      showToast('Could not fetch weather data', 'error');
+    }
   }
   
   async function handlePhotoSelect(event) {
@@ -1510,6 +1575,7 @@ const app = (() => {
     document.getElementById('weightOz').value = '';
     document.getElementById('bait').value = '';
     document.getElementById('weather').value = '';
+    document.getElementById('airPressure').value = '';
     document.getElementById('water').value = '';
     document.getElementById('notes').value = '';
     removePhoto();
@@ -1562,6 +1628,7 @@ const app = (() => {
       } : null,
       bait: document.getElementById('bait').value.trim() || null,
       weather: document.getElementById('weather').value || null,
+      airPressure: document.getElementById('airPressure').value || null,
       water: document.getElementById('water').value || null,
       notes: document.getElementById('notes').value.trim() || null,
       createdAtISO: new Date().toISOString(),
@@ -1794,6 +1861,7 @@ const app = (() => {
     
     document.getElementById('bait').value = catch_.bait || '';
     document.getElementById('weather').value = catch_.weather || '';
+    document.getElementById('airPressure').value = catch_.airPressure || '';
     document.getElementById('water').value = catch_.water || '';
     document.getElementById('notes').value = catch_.notes || '';
     
